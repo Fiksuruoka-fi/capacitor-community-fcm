@@ -81,17 +81,25 @@ public class FCMPlugin: CAPPlugin, MessagingDelegate {
         }
     }
 
-    @objc func refreshToken(_ call: CAPPluginCall) {
-        Messaging.messaging().token { token, error in
+      @objc func refreshToken(_ call: CAPPluginCall) {
+        Installations.installations().delete { error in
             if let error = error {
-                print("Error fetching FCM registration token: \(error)")
-                call.reject("Failed to get instance FirebaseID", error.localizedDescription)
-            } else if let token = token {
-                print("FCM registration token: \(token)");
-                self.fcmToken = token;
-                call.resolve([
-                    "token": token
-                ]);
+                print("Error deleting installation: \(error)")
+                call.reject("Cant delete Firebase Instance ID", error.localizedDescription)
+                return
+            }
+
+            Messaging.messaging().token { token, error in
+                if let error = error {
+                    print("Error fetching FCM registration token: \(error)")
+                    call.reject("Failed to get instance FirebaseID", error.localizedDescription)
+                } else if let token = token {
+                    print("FCM registration token: \(token)");
+                    self.fcmToken = token;
+                    call.resolve([
+                        "token": token
+                    ]);
+                }
             }
         }
     }
