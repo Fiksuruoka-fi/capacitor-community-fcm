@@ -1,16 +1,16 @@
 {
   "name": "@capacitor-community/fcm",
-  "version": "5.0.3",
+  "version": "5.0.4-fiksu.1",
   "description": "Enable Firebase Cloud Messaging features for Capacitor apps",
   "main": "dist/esm/index.js",
   "module": "dist/esm/index.js",
   "types": "dist/esm/index.d.ts",
   "unpkg": "dist/plugin.js",
   "files": [
-    "android/src/main",
+    "android/src/main/**",
     "android/build.gradle",
-    "dist/",
-    "ios/Plugin",
+    "dist/**",
+    "ios/Plugin/**",
     "CapacitorCommunityFcm.podspec"
   ],
   "author": "Stewan Silva",
