@@ -1,10 +1,7 @@
 import { WebPlugin } from '@capacitor/core';
 export class FCMWeb extends WebPlugin {
     constructor() {
-        super({
-            name: 'FCM',
-            platforms: ['web'],
-        });
+        super();
     }
     subscribeTo(_options) {
         throw this.unimplemented('Not implemented on web.');

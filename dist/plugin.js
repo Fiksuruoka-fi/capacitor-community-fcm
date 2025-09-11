@@ -1,16 +1,13 @@
 var capacitorPlugin = (function (exports, core) {
     'use strict';
 
-    const FCM$1 = core.registerPlugin("FCM", {
+    const FCM = core.registerPlugin("FCM", {
         web: () => Promise.resolve().then(function () { return web; }).then((m) => new m.FCMWeb()),
     });
 
     class FCMWeb extends core.WebPlugin {
         constructor() {
-            super({
-                name: 'FCM',
-                platforms: ['web'],
-            });
+            super();
         }
         subscribeTo(_options) {
             throw this.unimplemented('Not implemented on web.');
@@ -34,17 +31,14 @@ var capacitorPlugin = (function (exports, core) {
             throw this.unimplemented('Not implemented on web.');
         }
     }
-    const FCM = new FCMWeb();
+    new FCMWeb();
 
     var web = /*#__PURE__*/Object.freeze({
         __proto__: null,
-        FCMWeb: FCMWeb,
-        FCM: FCM
+        FCMWeb: FCMWeb
     });
 
-    exports.FCM = FCM$1;
-
-    Object.defineProperty(exports, '__esModule', { value: true });
+    exports.FCM = FCM;
 
     return exports;
 
