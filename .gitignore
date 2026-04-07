@@ -1,5 +1,4 @@
 # node files
-dist
 node_modules
 
 # iOS files
@@ -84,7 +83,6 @@ Thumbs.db
 !.env.example
 node_modules/
 .next/
-dist/
 build/
 __pycache__/
 *.pyc
