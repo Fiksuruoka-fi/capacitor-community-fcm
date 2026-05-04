@@ -7,6 +7,16 @@
             merged manifest. FCMMessagingService extends it and replaces it.
             If @capacitor/push-notifications isn't installed in the consuming
             app, this directive is a no-op.
+
+            WARNING: This removal is fragile. If @capacitor/push-notifications
+            renames or moves MessagingService in a future version, this
+            directive will silently fail and BOTH services will register —
+            Android FCM will then pick one non-deterministically. After any
+            push-notifications version bump, run
+              ./gradlew :app:processDebugManifest
+            and grep the merged manifest under
+              app/build/intermediates/merged_manifests/debug/AndroidManifest.xml
+            to confirm only FCMMessagingService is present.
         -->
         <service
             android:name="com.capacitorjs.plugins.pushnotifications.MessagingService"

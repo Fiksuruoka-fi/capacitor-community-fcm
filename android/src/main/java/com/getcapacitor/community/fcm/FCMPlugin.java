@@ -18,8 +18,14 @@ public class FCMPlugin extends Plugin {
 
     // Track the live plugin instance + buffer the last token in case
     // onNewToken fires before the plugin has finished loading.
-    private static FCMPlugin instance;
-    private static String pendingToken;
+    private static volatile FCMPlugin instance;
+    // Single-slot buffer — if onNewToken fires multiple times before the plugin
+    // load() runs, only the latest token is retained. Acceptable trade-off:
+    // (1) cold-start double-mints from FCM are extremely rare, and
+    // (2) once load() has run, instance != null and onNewTokenReceived dispatches
+    //     immediately via notifyListeners (which itself queues if the WebView
+    //     isn't ready yet).
+    private static volatile String pendingToken;
 
     @Override
     public void load() {
@@ -106,9 +112,10 @@ public class FCMPlugin extends Plugin {
                 if (!tokenResult.isSuccessful()) {
                     Exception exception = tokenResult.getException();
                     Log.w(TAG, "Fetching FCM registration token failed", exception);
+                    String message = exception != null ? exception.getLocalizedMessage() : null;
                     call.reject(
                         "Failed to get FCM registration token",
-                        exception != null ? exception.getLocalizedMessage() : null
+                        message != null ? message : "Unknown error"
                     );
                     return;
                 }
