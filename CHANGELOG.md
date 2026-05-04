@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## 8.2.0 — 2026-05-04
+
+- iOS: emit `tokenReceived` event from `MessagingDelegate.messaging(_:didReceiveRegistrationToken:)`.
+- iOS: harden `getToken()` to await the delegate when no token is cached (10s timeout fallback).
+- Android: emit `tokenReceived` event via `FCMMessagingService` subclass of Capacitor PushNotifications' `MessagingService`. AndroidManifest.xml uses `tools:node="remove"` to drop the original entry so the subclass takes its place.
+- Android: fix pre-existing `getToken()` bug (duplicate `getInstance().getToken()` call, missing failure listener on first call).
+- Add `TokenReceivedEvent` type and `addListener('tokenReceived', ...)` overload to FCMPlugin definitions.
+- Add `@capacitor/push-notifications` to peer dependencies (`>=8.0.0`).
+
 ## [8.1.0](https://github.com/capacitor-community/fcm/compare/v8.0.1...v8.1.0) (2025-12-26)
 
 
