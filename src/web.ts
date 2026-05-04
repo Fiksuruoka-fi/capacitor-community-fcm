@@ -1,6 +1,7 @@
+import type { PluginListenerHandle } from '@capacitor/core';
 import { WebPlugin } from '@capacitor/core';
 
-import type { FCMPlugin } from './definitions';
+import type { FCMPlugin, TokenReceivedEvent } from './definitions';
 
 export class FCMWeb extends WebPlugin implements FCMPlugin {
   constructor() {
@@ -32,6 +33,13 @@ export class FCMWeb extends WebPlugin implements FCMPlugin {
   }
 
   refreshToken(): Promise<{ token: string }> {
+    throw this.unimplemented('Not implemented on web.');
+  }
+
+  addListener(
+    _eventName: 'tokenReceived',
+    _listenerFunc: (event: TokenReceivedEvent) => void,
+  ): Promise<PluginListenerHandle> {
     throw this.unimplemented('Not implemented on web.');
   }
 }
