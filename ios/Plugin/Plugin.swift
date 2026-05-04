@@ -16,6 +16,7 @@ import FirebaseInstallations
 public class FCMPlugin: CAPPlugin, MessagingDelegate {
     var fcmToken: String?
     private var pendingTokenCalls: [CAPPluginCall] = []
+    private var lastNotifiedToken: String?
 
     override public func load() {
         if FirebaseApp.app() == nil {
@@ -136,13 +137,27 @@ public class FCMPlugin: CAPPlugin, MessagingDelegate {
     @objc public func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         self.fcmToken = fcmToken
         guard let token = fcmToken else { return }
-        notifyListeners("tokenReceived", data: ["token": token])
-    
-        // Resolve any in-flight getToken() calls with the fresh token.
+
+        // Drain any pending getToken() calls regardless of APNs state — callers
+        // explicitly asked for the current token, even a pre-APNs one. They get
+        // the same value FCM.getToken() would have returned synchronously.
         let calls = pendingTokenCalls
         pendingTokenCalls.removeAll()
         for call in calls {
             call.resolve(["token": token])
         }
+
+        // Only fire `tokenReceived` for tokens that are bound to a real APNs
+        // device token AND haven't already been delivered. Firebase Messaging
+        // mints a "pre-APNs" registration token on first launch before APNs
+        // registration completes; emitting that one causes a stale Firestore
+        // document because FCM will replace the token a moment later. The
+        // lastNotifiedToken check also dedupes the redeliveries Firebase
+        // sometimes emits on app foreground or background→foreground transitions.
+        guard Messaging.messaging().apnsToken != nil else { return }
+        guard token != lastNotifiedToken else { return }
+        lastNotifiedToken = token
+
+        notifyListeners("tokenReceived", data: ["token": token])
     }
 }

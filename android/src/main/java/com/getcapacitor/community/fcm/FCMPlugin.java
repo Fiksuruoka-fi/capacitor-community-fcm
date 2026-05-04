@@ -27,6 +27,11 @@ public class FCMPlugin extends Plugin {
     //     isn't ready yet).
     private static volatile String pendingToken;
 
+    // Last token actually emitted to JS via notifyListeners. Used to dedupe
+    // back-to-back deliveries of the same token (FCM sometimes re-emits on
+    // service restart or after a process death). Symmetry with the iOS plugin.
+    private volatile String lastNotifiedToken;
+
     @Override
     public void load() {
         super.load();
@@ -60,6 +65,11 @@ public class FCMPlugin extends Plugin {
     }
 
     private void dispatchTokenReceived(@NonNull String token) {
+        if (token.equals(lastNotifiedToken)) {
+            return;
+        }
+        lastNotifiedToken = token;
+
         JSObject data = new JSObject();
         data.put("token", token);
         notifyListeners(EVENT_TOKEN_RECEIVED, data, true);
