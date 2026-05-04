@@ -15,6 +15,7 @@ import FirebaseInstallations
 @objc(FCMPlugin)
 public class FCMPlugin: CAPPlugin, MessagingDelegate {
     var fcmToken: String?
+    private var pendingTokenCalls: [CAPPluginCall] = []
 
     override public func load() {
         if FirebaseApp.app() == nil {
@@ -60,23 +61,28 @@ public class FCMPlugin: CAPPlugin, MessagingDelegate {
     }
 
     @objc func getToken(_ call: CAPPluginCall) {
-        if (fcmToken ?? "").isEmpty {
-            Messaging.messaging().token { token, error in
-                if let error = error {
-                    print("Error fetching FCM registration token: \(error)")
-                    call.reject("Failed to get instance FirebaseID", error.localizedDescription)
-                } else if let token = token {
-                    print("FCM registration token: \(token)")
-                    self.fcmToken = token
-                    call.resolve([
-                        "token": token
-                    ])
+        if let token = fcmToken, !token.isEmpty {
+            call.resolve(["token": token])
+            return
+        }
+
+        // No cached token yet — wait for the delegate, with a timeout fallback.
+        pendingTokenCalls.append(call)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+            guard let self = self else { return }
+            // If still pending after 10s, fall back to Messaging's getter.
+            let stillPending = self.pendingTokenCalls
+            self.pendingTokenCalls.removeAll()
+            for pending in stillPending {
+                Messaging.messaging().token { token, error in
+                    if let error = error {
+                        pending.reject("Failed to get FCM token", error.localizedDescription)
+                    } else if let token = token {
+                        self.fcmToken = token
+                        pending.resolve(["token": token])
+                    }
                 }
             }
-        } else {
-            call.resolve([
-                "token": fcmToken
-            ])
         }
     }
 
@@ -129,5 +135,14 @@ public class FCMPlugin: CAPPlugin, MessagingDelegate {
 
     @objc public func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         self.fcmToken = fcmToken
+        guard let token = fcmToken else { return }
+        notifyListeners("tokenReceived", data: ["token": token])
+    
+        // Resolve any in-flight getToken() calls with the fresh token.
+        let calls = pendingTokenCalls
+        pendingTokenCalls.removeAll()
+        for call in calls {
+            call.resolve(["token": token])
+        }
     }
 }
