@@ -1,7 +1,6 @@
-import type { PluginListenerHandle } from '@capacitor/core';
 import { WebPlugin } from '@capacitor/core';
 
-import type { FCMPlugin, TokenReceivedEvent } from './definitions';
+import type { FCMPlugin } from './definitions';
 
 export class FCMWeb extends WebPlugin implements FCMPlugin {
   constructor() {

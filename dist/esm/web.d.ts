@@ -1,6 +1,5 @@
-import type { PluginListenerHandle } from '@capacitor/core';
 import { WebPlugin } from '@capacitor/core';
-import type { FCMPlugin, TokenReceivedEvent } from './definitions';
+import type { FCMPlugin } from './definitions';
 export declare class FCMWeb extends WebPlugin implements FCMPlugin {
     constructor();
     subscribeTo(_options: {
@@ -26,7 +25,6 @@ export declare class FCMWeb extends WebPlugin implements FCMPlugin {
     refreshToken(): Promise<{
         token: string;
     }>;
-    addListener(_eventName: 'tokenReceived', _listenerFunc: (event: TokenReceivedEvent) => void): Promise<PluginListenerHandle>;
 }
 declare const FCM: FCMWeb;
 export { FCM };
