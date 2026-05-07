@@ -1,4 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <!--
+            Drop PushNotifications' default MessagingService entry from the
+            merged manifest. FCMMessagingService extends it and replaces it.
+            If @capacitor/push-notifications isn't installed in the consuming
+            app, this directive is a no-op.
 
-  <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-  </manifest>
-  
+            WARNING: This removal is fragile. If @capacitor/push-notifications
+            renames or moves MessagingService in a future version, this
+            directive will silently fail and BOTH services will register —
+            Android FCM will then pick one non-deterministically. After any
+            push-notifications version bump, run
+              ./gradlew :app:processDebugManifest
+            and grep the merged manifest under
+              app/build/intermediates/merged_manifests/debug/AndroidManifest.xml
+            to confirm only FCMMessagingService is present.
+        -->
+        <service
+            android:name="com.capacitorjs.plugins.pushnotifications.MessagingService"
+            tools:node="remove" />
+
+        <service
+            android:name="com.getcapacitor.community.fcm.FCMMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

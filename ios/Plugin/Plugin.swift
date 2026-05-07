@@ -15,6 +15,8 @@ import FirebaseInstallations
 @objc(FCMPlugin)
 public class FCMPlugin: CAPPlugin, MessagingDelegate {
     var fcmToken: String?
+    private var pendingTokenCalls: [CAPPluginCall] = []
+    private var lastNotifiedToken: String?
 
     override public func load() {
         if FirebaseApp.app() == nil {
@@ -60,11 +62,43 @@ public class FCMPlugin: CAPPlugin, MessagingDelegate {
     }
 
     @objc func getToken(_ call: CAPPluginCall) {
-        if (fcmToken ?? "").isEmpty {
+        if let token = fcmToken, !token.isEmpty {
+            call.resolve(["token": token])
+            return
+        }
+
+        // No cached token yet — wait for the delegate, with a timeout fallback.
+        pendingTokenCalls.append(call)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+            guard let self = self else { return }
+            // If still pending after 10s, fall back to Messaging's getter.
+            let stillPending = self.pendingTokenCalls
+            self.pendingTokenCalls.removeAll()
+            for pending in stillPending {
+                Messaging.messaging().token { token, error in
+                    if let error = error {
+                        pending.reject("Failed to get FCM token", error.localizedDescription)
+                    } else if let token = token {
+                        self.fcmToken = token
+                        pending.resolve(["token": token])
+                    }
+                }
+            }
+        }
+    }
+
+    @objc func refreshToken(_ call: CAPPluginCall) {
+        Messaging.messaging().deleteToken { error in
+            if let error = error {
+                print("Error deleting FCM token: \(error)")
+                call.reject("Failed to delete FCM token", error.localizedDescription)
+                return
+            }
+
             Messaging.messaging().token { token, error in
                 if let error = error {
                     print("Error fetching FCM registration token: \(error)")
-                    call.reject("Failed to get instance FirebaseID", error.localizedDescription)
+                    call.reject("Failed to get FCM registration token", error.localizedDescription)
                 } else if let token = token {
                     print("FCM registration token: \(token)")
                     self.fcmToken = token
@@ -72,35 +106,6 @@ public class FCMPlugin: CAPPlugin, MessagingDelegate {
                         "token": token
                     ])
                 }
-            }
-        } else {
-            call.resolve([
-                "token": fcmToken
-            ])
-        }
-    }
-
-    @objc func refreshToken(_ call: CAPPluginCall) {
-        // Delete FCM Token on Firebase
-        FirebaseMessaging.Messaging.messaging().deleteData { error in
-            guard let error = error else {
-                print("Delete FCMToken successful!")
-                return
-            }
-            call.reject("Delete FCMToken failed", error.localizedDescription)
-            print("Delete FCMToken failed: \(String(describing: error.localizedDescription))!")
-        }
-
-        Messaging.messaging().token { token, error in
-            if let error = error {
-                print("Error fetching FCM registration token: \(error)")
-                call.reject("Failed to get instance FirebaseID", error.localizedDescription)
-            } else if let token = token {
-                print("FCM registration token: \(token)")
-                self.fcmToken = token
-                call.resolve([
-                    "token": token
-                ])
             }
         }
     }
@@ -131,5 +136,28 @@ public class FCMPlugin: CAPPlugin, MessagingDelegate {
 
     @objc public func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         self.fcmToken = fcmToken
+        guard let token = fcmToken else { return }
+
+        // Drain any pending getToken() calls regardless of APNs state — callers
+        // explicitly asked for the current token, even a pre-APNs one. They get
+        // the same value FCM.getToken() would have returned synchronously.
+        let calls = pendingTokenCalls
+        pendingTokenCalls.removeAll()
+        for call in calls {
+            call.resolve(["token": token])
+        }
+
+        // Only fire `tokenReceived` for tokens that are bound to a real APNs
+        // device token AND haven't already been delivered. Firebase Messaging
+        // mints a "pre-APNs" registration token on first launch before APNs
+        // registration completes; emitting that one causes a stale Firestore
+        // document because FCM will replace the token a moment later. The
+        // lastNotifiedToken check also dedupes the redeliveries Firebase
+        // sometimes emits on app foreground or background→foreground transitions.
+        guard Messaging.messaging().apnsToken != nil else { return }
+        guard token != lastNotifiedToken else { return }
+        lastNotifiedToken = token
+
+        notifyListeners("tokenReceived", data: ["token": token])
     }
 }

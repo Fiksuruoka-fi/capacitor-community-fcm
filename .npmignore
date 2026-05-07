@@ -1,0 +1,25 @@
+# npmignore - controls what files are excluded from the published package.
+# When this file exists, .gitignore is NOT used for pack filtering.
+# The "files" field in package.json is the whitelist; this file adds exclusions.
+
+node_modules
+.git
+.github
+.gsd
+sensitive
+
+# IDE
+.idea
+.vscode
+*.iml
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dev/build artifacts not needed in package
+*.log
+coverage
+.cache
+tmp
