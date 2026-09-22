@@ -31,6 +31,9 @@ class FCMWeb extends core.WebPlugin {
     refreshToken() {
         throw this.unimplemented('Not implemented on web.');
     }
+    areNotificationsEnabled() {
+        throw this.unimplemented('Not implemented on web.');
+    }
 }
 new FCMWeb();
 

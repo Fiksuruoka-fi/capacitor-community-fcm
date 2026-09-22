@@ -29,6 +29,54 @@ We're starting fresh under an official org. If you were using the previous npm p
 
 ## Installation
 
+### Fiksuruoka maintained fork
+
+Fiksuruoka consumes this repository through a full Git commit pin in the website's
+`package.json` and `yarn.lock`. Install the reviewed fork commit, not the community
+npm package or a moving `main` reference. Changes here must ship in new Android
+and iOS binaries; a website-only update cannot change an installed native bridge.
+
+The fork owns APNs-to-FCM sequencing and token callback delivery. `getToken()` waits
+for APNs mapping on iOS, then reads through the Firebase SDK on both platforms,
+including when the token is unchanged. It rejects errors, empty results and reads
+that do not finish within 15 seconds. Call `PushNotifications.register()` first.
+Never store its iOS `registration` event value: that value is an APNs token.
+
+Attach `tokenReceived` early and use it to wake the app's existing synchronization
+coordinator. Buffered event payloads are observations, so re-read `getToken()` before
+saving. iOS may coalesce repeated values. Explicit startup, foreground and reconnect
+reads remain necessary, as do retries after a failed backend write. Do not call
+`refreshToken()` for normal synchronization, consent changes or login/logout.
+
+```mermaid
+flowchart LR
+    OS[APNs or Android FCM SDK] --> Plugin[Native readiness and current token]
+    Plugin --> App[App consent and durable synchronization]
+    App --> DB[Firestore device state]
+    DB --> Backend[Eligibility and Custobar projection]
+    Plugin -. Rotation notification .-> App
+```
+
+`areNotificationsEnabled()` exists because Capacitor Push Notifications resolves
+`checkPermissions()` to `granted` without checking anything below Android 13. A user who
+blocks notifications in system settings on Android 7-12 stays `granted` there, so the app
+never learns the device stopped accepting pushes. Treat this getter as the OS truth and
+`checkPermissions()` as the runtime-permission grant. Older installed binaries do not
+expose the method, so feature-detect before calling it.
+
+The website owns marketing/order choices, OS permission checks, current account,
+durable retry and Firestore acknowledgement. Firebase Functions own retention,
+send-time checks and Custobar convergence. A native token is not marketing consent
+or proof that Firestore/Custobar has accepted an update.
+
+Run `bash test/run-ios-bridge-tests.sh` on macOS for the actual Swift bridge against
+local SDK doubles. This covers pre-APNs callbacks, retained events, unchanged reads,
+concurrent callers, duplicate/late completions, timeouts and errors without any
+Firebase resource access. It does not replace real SDK compilation or physical-device
+tests for cold start, rotation, app resume, offline recovery and delivery.
+
+### Community package installation
+
 Using npm:
 
 ```bash
@@ -49,7 +97,7 @@ npx cap sync
 
 > ### Notice
 >
-> This plugin is intended to be used combined with Capacitor API for [Push Notifications](https://capacitor.ionicframework.com/docs/apis/push-notifications). Capacitor only provides APN token whereas this plugin offers the possibility to work with FCM tokens and more.
+> Use this plugin with Capacitor [Push Notifications](https://capacitorjs.com/docs/apis/push-notifications). Its iOS registration event contains an APNs token; this plugin reads the FCM token on both platforms.
 
 ## API
 
@@ -57,56 +105,37 @@ npx cap sync
 | ------------------- | --------------------------------------------- | ----------- |
 | `subscribeTo`       | subscribe to fcm topic                        | ios/android |
 | `unsubscribeFrom`   | unsubscribe from fcm topic                    | ios/android |
-| `getToken`          | get fcm token to eventually use from a server | ios/android |
-| `refreshToken`      | refresh fcm token to get a new one            | ios/android |
+| `getToken`          | read the current SDK token after native readiness | ios/android |
+| `refreshToken`      | explicitly delete and replace a token; not a heartbeat | ios/android |
 | `deleteInstance`    | remove local fcm instance completely          | ios/android |
 | `setAutoInit`       | enable the auto initialization of the library | ios/android |
 | `isAutoInitEnabled` | check whether auto initialization is enabled  | ios/android |
+| `areNotificationsEnabled` | read the OS notification switch (accurate below Android 13) | ios/android |
+| `addListener('tokenReceived', ...)` | wake an app sync when a token is observed | ios/android |
+| `removeAllListeners` | remove this plugin's event listeners | ios/android |
 
 ## Usage
+
+The transport read below assumes the app has already obtained OS notification
+permission. OS permission and a successful token read do not establish marketing
+consent. Fiksuruoka runs this read inside its durable app coordinator.
 
 ```ts
 import { FCM } from '@capacitor-community/fcm';
 import { PushNotifications } from '@capacitor/push-notifications';
 
-// external required step
-// register for push
-await PushNotifications.requestPermissions();
 await PushNotifications.register();
-
-// now you can subscribe to a specific topic
-FCM.subscribeTo({ topic: 'test' })
-  .then(r => alert(`subscribed to topic`))
-  .catch(err => console.log(err));
-
-// Unsubscribe from a specific topic
-FCM.unsubscribeFrom({ topic: 'test' })
-  .then(() => alert(`unsubscribed from topic`))
-  .catch(err => console.log(err));
-
-// Get FCM token instead of the APN one returned by Capacitor
-FCM.getToken()
-  .then(r => alert(`Token ${r.token}`))
-  .catch(err => console.log(err));
-
-// Delete the old FCM token and get a new one
-FCM.refreshToken()
-  .then(r => alert(`Token ${r.token}`))
-  .catch(err => console.log(err));
-
-// Remove FCM instance
-FCM.deleteInstance()
-  .then(() => alert(`Token deleted`))
-  .catch(err => console.log(err));
-
-// Enable the auto initialization of the library
-FCM.setAutoInit({ enabled: true }).then(() => alert(`Auto init enabled`));
-
-// Check the auto initialization status
-FCM.isAutoInitEnabled().then(r => {
-  console.log('Auto init is ' + (r.enabled ? 'enabled' : 'disabled'));
-});
+const { token } = await FCM.getToken();
 ```
+
+The app persists `token` with the current owner and consent, then acknowledges only
+the matching successful backend write. If registration, retrieval or persistence
+fails, keep the app's pending work for retry. Do not display or log token values.
+
+Install a `tokenReceived` listener before starting registration. Route it into the
+same coordinator, which must repeat the explicit read above. Never save a retained
+event payload directly. `refreshToken()` and `deleteInstance()` are destructive
+transport operations and are not part of the normal app-open or consent flow.
 
 ## Add Google config files
 

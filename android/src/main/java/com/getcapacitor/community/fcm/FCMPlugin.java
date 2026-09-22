@@ -1,7 +1,9 @@
 package com.getcapacitor.community.fcm;
 
-import android.util.Log;
+import android.os.Handler;
+import android.os.Looper;
 import androidx.annotation.NonNull;
+import androidx.core.app.NotificationManagerCompat;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -9,6 +11,7 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.google.firebase.installations.FirebaseInstallations;
 import com.google.firebase.messaging.FirebaseMessaging;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @CapacitorPlugin(name = "FCM")
 public class FCMPlugin extends Plugin {
@@ -19,33 +22,28 @@ public class FCMPlugin extends Plugin {
     // Track the live plugin instance + buffer the last token in case
     // onNewToken fires before the plugin has finished loading.
     private static volatile FCMPlugin instance;
-    // Single-slot buffer — if onNewToken fires multiple times before the plugin
-    // load() runs, only the latest token is retained. Acceptable trade-off:
-    // (1) cold-start double-mints from FCM are extremely rare, and
-    // (2) once load() has run, instance != null and onNewTokenReceived dispatches
-    //     immediately via notifyListeners (which itself queues if the WebView
-    //     isn't ready yet).
+    // Retain the latest rotation until a bridge exists. JS re-reads SDK state.
     private static volatile String pendingToken;
-
-    // Last token actually emitted to JS via notifyListeners. Used to dedupe
-    // back-to-back deliveries of the same token (FCM sometimes re-emits on
-    // service restart or after a process death). Symmetry with the iOS plugin.
-    private volatile String lastNotifiedToken;
 
     @Override
     public void load() {
         super.load();
-        instance = this;
-        if (pendingToken != null) {
-            dispatchTokenReceived(pendingToken);
-            pendingToken = null;
+        synchronized (FCMPlugin.class) {
+            instance = this;
+            if (pendingToken != null) {
+                String token = pendingToken;
+                pendingToken = null;
+                dispatchTokenReceived(token);
+            }
         }
     }
 
     @Override
     protected void handleOnDestroy() {
-        if (instance == this) {
-            instance = null;
+        synchronized (FCMPlugin.class) {
+            if (instance == this) {
+                instance = null;
+            }
         }
         super.handleOnDestroy();
     }
@@ -56,7 +54,7 @@ public class FCMPlugin extends Plugin {
      * plugin hasn't loaded yet (e.g. cold-start race) and dispatches it
      * via notifyListeners on the next load() call.
      */
-    public static void onNewTokenReceived(@NonNull String token) {
+    public static synchronized void onNewTokenReceived(@NonNull String token) {
         if (instance != null) {
             instance.dispatchTokenReceived(token);
         } else {
@@ -65,11 +63,6 @@ public class FCMPlugin extends Plugin {
     }
 
     private void dispatchTokenReceived(@NonNull String token) {
-        if (token.equals(lastNotifiedToken)) {
-            return;
-        }
-        lastNotifiedToken = token;
-
         JSObject data = new JSObject();
         data.put("token", token);
         notifyListeners(EVENT_TOKEN_RECEIVED, data, true);
@@ -116,21 +109,30 @@ public class FCMPlugin extends Plugin {
 
     @PluginMethod
     public void getToken(final PluginCall call) {
+        Handler handler = new Handler(Looper.getMainLooper());
+        AtomicBoolean settled = new AtomicBoolean(false);
+        Runnable timeout = () -> {
+            if (settled.compareAndSet(false, true)) {
+                call.reject("Timed out waiting for an FCM token");
+            }
+        };
+        handler.postDelayed(timeout, 15000);
         FirebaseMessaging.getInstance()
             .getToken()
-            .addOnCompleteListener(getActivity(), tokenResult -> {
+            .addOnCompleteListener(tokenResult -> {
+                if (!settled.compareAndSet(false, true)) return;
+                handler.removeCallbacks(timeout);
                 if (!tokenResult.isSuccessful()) {
-                    Exception exception = tokenResult.getException();
-                    Log.w(TAG, "Fetching FCM registration token failed", exception);
-                    String message = exception != null ? exception.getLocalizedMessage() : null;
-                    call.reject(
-                        "Failed to get FCM registration token",
-                        message != null ? message : "Unknown error"
-                    );
+                    call.reject("Failed to get FCM registration token");
+                    return;
+                }
+                String token = tokenResult.getResult();
+                if (token == null || token.isEmpty()) {
+                    call.reject("FCM returned an empty registration token");
                     return;
                 }
                 JSObject data = new JSObject();
-                data.put("token", tokenResult.getResult());
+                data.put("token", token);
                 call.resolve(data);
             });
     }
@@ -139,17 +141,8 @@ public class FCMPlugin extends Plugin {
     public void refreshToken(final PluginCall call) {
         FirebaseMessaging.getInstance()
             .deleteToken()
-            .addOnCompleteListener(result -> {
-                FirebaseMessaging.getInstance()
-                    .getToken()
-                    .addOnCompleteListener(getActivity(), tokenResult -> {
-                        JSObject data = new JSObject();
-                        data.put("token", tokenResult.getResult());
-                        call.resolve(data);
-                    })
-                    .addOnFailureListener(e -> call.reject("Failed to get FCM registration token", e));
-            })
-            .addOnFailureListener(e -> call.reject("Failed to delete FCM registration token", e));
+            .addOnSuccessListener(result -> getToken(call))
+            .addOnFailureListener(e -> call.reject("Failed to delete FCM registration token"));
     }
 
     @PluginMethod
@@ -164,6 +157,18 @@ public class FCMPlugin extends Plugin {
         final boolean enabled = FirebaseMessaging.getInstance().isAutoInitEnabled();
         JSObject data = new JSObject();
         data.put("enabled", enabled);
+        call.resolve(data);
+    }
+
+    /**
+     * Report the OS notification switch, which Capacitor Push Notifications
+     * cannot see below Android 13 because its checkPermissions resolves
+     * "granted" without consulting NotificationManagerCompat.
+     */
+    @PluginMethod
+    public void areNotificationsEnabled(final PluginCall call) {
+        JSObject data = new JSObject();
+        data.put("enabled", NotificationManagerCompat.from(getContext()).areNotificationsEnabled());
         call.resolve(data);
     }
 }

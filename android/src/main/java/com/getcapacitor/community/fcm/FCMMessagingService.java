@@ -18,8 +18,8 @@ import com.capacitorjs.plugins.pushnotifications.MessagingService;
  * PushNotifications' existing token-handling behaviour (its JS-side
  * `registration` event still fires as before, even if the fiksuruoka handler
  * does not currently subscribe to it for token persistence). If super throws,
- * we log and continue — `tokenReceived` is the authoritative source for the
- * JS layer and must not be skipped because of a fault upstream.
+ * we log and continue so the app can re-read the current token through
+ * getToken even if the other plugin could not forward its event.
  */
 public class FCMMessagingService extends MessagingService {
 
@@ -31,7 +31,6 @@ public class FCMMessagingService extends MessagingService {
             super.onNewToken(token);
         } catch (Exception e) {
             Log.w(TAG, "PushNotifications.onNewToken threw an exception", e);
-            // Continue — `tokenReceived` is the authoritative source.
         }
         FCMPlugin.onNewTokenReceived(token);
     }

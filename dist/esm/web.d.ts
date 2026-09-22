@@ -25,6 +25,9 @@ export declare class FCMWeb extends WebPlugin implements FCMPlugin {
     refreshToken(): Promise<{
         token: string;
     }>;
+    areNotificationsEnabled(): Promise<{
+        enabled: boolean;
+    }>;
 }
 declare const FCM: FCMWeb;
 export { FCM };

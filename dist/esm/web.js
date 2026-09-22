@@ -24,6 +24,9 @@ export class FCMWeb extends WebPlugin {
     refreshToken() {
         throw this.unimplemented('Not implemented on web.');
     }
+    areNotificationsEnabled() {
+        throw this.unimplemented('Not implemented on web.');
+    }
 }
 const FCM = new FCMWeb();
 export { FCM };
