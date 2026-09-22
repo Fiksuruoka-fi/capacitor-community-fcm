@@ -29,6 +29,47 @@ We're starting fresh under an official org. If you were using the previous npm p
 
 ## Installation
 
+### Fiksuruoka maintained fork
+
+Fiksuruoka consumes this repository through a full Git commit pin in the website's
+`package.json` and `yarn.lock`. Install the reviewed fork commit, not the community
+npm package or a moving `main` reference. Changes here must ship in new Android
+and iOS binaries; a website-only update cannot change an installed native bridge.
+
+The fork owns APNs-to-FCM sequencing and token callback delivery. `getToken()` waits
+for APNs mapping on iOS, then reads through the Firebase SDK on both platforms,
+including when the token is unchanged. It rejects errors, empty results and reads
+that do not finish within 15 seconds. Call `PushNotifications.register()` first.
+Never store its iOS `registration` event value: that value is an APNs token.
+
+Attach `tokenReceived` early and use it to wake the app's existing synchronization
+coordinator. Buffered event payloads are observations, so re-read `getToken()` before
+saving. iOS may coalesce repeated values. Explicit startup, foreground and reconnect
+reads remain necessary, as do retries after a failed backend write. Do not call
+`refreshToken()` for normal synchronization, consent changes or login/logout.
+
+```mermaid
+flowchart LR
+    OS[APNs or Android FCM SDK] --> Plugin[Native readiness and current token]
+    Plugin --> App[App consent and durable synchronization]
+    App --> DB[Firestore device state]
+    DB --> Backend[Eligibility and Custobar projection]
+    Plugin -. Rotation notification .-> App
+```
+
+The website owns marketing/order choices, OS permission checks, current account,
+durable retry and Firestore acknowledgement. Firebase Functions own retention,
+send-time checks and Custobar convergence. A native token is not marketing consent
+or proof that Firestore/Custobar has accepted an update.
+
+Run `bash test/run-ios-bridge-tests.sh` on macOS for the actual Swift bridge against
+local SDK doubles. This covers pre-APNs callbacks, retained events, unchanged reads,
+concurrent callers, duplicate/late completions, timeouts and errors without any
+Firebase resource access. It does not replace real SDK compilation or physical-device
+tests for cold start, rotation, app resume, offline recovery and delivery.
+
+### Community package installation
+
 Using npm:
 
 ```bash
