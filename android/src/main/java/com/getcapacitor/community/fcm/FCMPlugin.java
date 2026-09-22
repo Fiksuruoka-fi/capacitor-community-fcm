@@ -3,6 +3,7 @@ package com.getcapacitor.community.fcm;
 import android.os.Handler;
 import android.os.Looper;
 import androidx.annotation.NonNull;
+import androidx.core.app.NotificationManagerCompat;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -156,6 +157,18 @@ public class FCMPlugin extends Plugin {
         final boolean enabled = FirebaseMessaging.getInstance().isAutoInitEnabled();
         JSObject data = new JSObject();
         data.put("enabled", enabled);
+        call.resolve(data);
+    }
+
+    /**
+     * Report the OS notification switch, which Capacitor Push Notifications
+     * cannot see below Android 13 because its checkPermissions resolves
+     * "granted" without consulting NotificationManagerCompat.
+     */
+    @PluginMethod
+    public void areNotificationsEnabled(final PluginCall call) {
+        JSObject data = new JSObject();
+        data.put("enabled", NotificationManagerCompat.from(getContext()).areNotificationsEnabled());
         call.resolve(data);
     }
 }

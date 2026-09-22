@@ -163,6 +163,17 @@ public class FCMPlugin: CAPPlugin, MessagingDelegate {
         ])
     }
 
+    @objc func areNotificationsEnabled(_ call: CAPPluginCall) {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            // Match on refusal, so provisional and ephemeral authorization —
+            // which still deliver, quietly — stay enabled without naming a case
+            // the macOS test build does not have.
+            let refused = settings.authorizationStatus == .denied ||
+                settings.authorizationStatus == .notDetermined
+            call.resolve(["enabled": !refused])
+        }
+    }
+
     @objc public func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         DispatchQueue.main.async {
             // Rotation wakes the app; only an explicit SDK read settles getToken.

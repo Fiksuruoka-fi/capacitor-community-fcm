@@ -57,6 +57,13 @@ flowchart LR
     Plugin -. Rotation notification .-> App
 ```
 
+`areNotificationsEnabled()` exists because Capacitor Push Notifications resolves
+`checkPermissions()` to `granted` without checking anything below Android 13. A user who
+blocks notifications in system settings on Android 7-12 stays `granted` there, so the app
+never learns the device stopped accepting pushes. Treat this getter as the OS truth and
+`checkPermissions()` as the runtime-permission grant. Older installed binaries do not
+expose the method, so feature-detect before calling it.
+
 The website owns marketing/order choices, OS permission checks, current account,
 durable retry and Firestore acknowledgement. Firebase Functions own retention,
 send-time checks and Custobar convergence. A native token is not marketing consent
@@ -103,6 +110,7 @@ npx cap sync
 | `deleteInstance`    | remove local fcm instance completely          | ios/android |
 | `setAutoInit`       | enable the auto initialization of the library | ios/android |
 | `isAutoInitEnabled` | check whether auto initialization is enabled  | ios/android |
+| `areNotificationsEnabled` | read the OS notification switch (accurate below Android 13) | ios/android |
 | `addListener('tokenReceived', ...)` | wake an app sync when a token is observed | ios/android |
 | `removeAllListeners` | remove this plugin's event listeners | ios/android |
 

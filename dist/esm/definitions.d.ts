@@ -63,6 +63,18 @@ export interface FCMPlugin {
         enabled: boolean;
     }>;
     /**
+     * Read whether the OS currently delivers notifications for this app.
+     *
+     * Capacitor Push Notifications reports `granted` unconditionally below
+     * Android 13, so it cannot see a channel blocked in system settings. This
+     * reads the platform's own switch instead: `NotificationManagerCompat` on
+     * Android and `UNNotificationSettings.authorizationStatus` on iOS.
+     * Provisional and ephemeral iOS authorization count as enabled.
+     */
+    areNotificationsEnabled(): Promise<{
+        enabled: boolean;
+    }>;
+    /**
      * Listen for token changes. Both native bridges retain events for a late
      * listener within the current native process. This is not a durable backend
      * queue: keep explicit reads on startup/foreground and retry failed writes.
